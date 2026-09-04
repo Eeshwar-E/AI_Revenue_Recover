@@ -7,6 +7,9 @@ const pageNames: Record<string, string> = {
   "/agent-runs": "Agent runs",
   "/audit": "Audit trail",
   "/users": "Users & access",
+  "/customers": "Customers",
+  "/receivables": "Receivables",
+  "/subscriptions": "Subscriptions",
 };
 
 function TopBar() {

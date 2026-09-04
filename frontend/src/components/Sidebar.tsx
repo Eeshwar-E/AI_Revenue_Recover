@@ -5,6 +5,9 @@ function Sidebar() {
   const links = [
     { href: "/", label: "Overview" },
     { href: "/cases", label: "Revenue risks" },
+    { href: "/customers", label: "Customers" },
+    { href: "/receivables", label: "Receivables" },
+    { href: "/subscriptions", label: "Subscriptions" },
     { href: "/agent-runs", label: "Agent runs" },
     { href: "/audit", label: "Audit trail" },
     { href: "/users", label: "Users & access" },

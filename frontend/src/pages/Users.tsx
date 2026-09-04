@@ -41,6 +41,11 @@ const users = [
 
 function Users() {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [notice, setNotice] = useState("");
+  const visibleUsers = users.filter(
+    (user) => roleFilter === "ALL" || user.role === roleFilter,
+  );
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -78,23 +83,28 @@ function Users() {
           </button>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="metric-card">
+      <div className="square-card-grid">
+        <div className="metric-card square-card">
           <p className="section-kicker">Members</p>
           <p className="mt-2 text-2xl font-semibold">{users.length}</p>
           <p className="mt-1 text-xs text-slate-500">Across this workspace</p>
         </div>
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <p className="section-kicker">Active now</p>
           <p className="mt-2 text-2xl font-semibold text-teal-700">
             {users.filter((user) => user.active).length}
           </p>
           <p className="mt-1 text-xs text-slate-500">Verified operators</p>
         </div>
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <p className="section-kicker">Security posture</p>
           <p className="mt-2 text-2xl font-semibold text-emerald-700">Strong</p>
           <p className="mt-1 text-xs text-slate-500">MFA and policy gates on</p>
+        </div>
+        <div className="metric-card square-card">
+          <p className="section-kicker">Approval guard</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-800">₹1L+</p>
+          <p className="mt-1 text-xs text-slate-500">Manual review threshold</p>
         </div>
       </div>
       <section className="panel overflow-hidden p-0">
@@ -102,8 +112,22 @@ function Users() {
           <p className="section-kicker">Team directory</p>
           <h2 className="section-title">Workspace members</h2>
         </div>
+        <div className="flex justify-end border-b border-slate-100 p-4">
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="control-input"
+          >
+            <option value="ALL">All roles</option>
+            {Array.from(new Set(users.map((user) => user.role))).map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="divide-y divide-slate-100">
-          {users.map((user) => (
+          {visibleUsers.map((user) => (
             <div className="user-row" key={user.email}>
               <div className={`avatar avatar-${user.tone}`}>
                 {user.initials}
@@ -124,13 +148,27 @@ function Users() {
                 <i />
                 {user.active ? "Active" : "Invited"}
               </span>
-              <button className="row-action" aria-label={`Manage ${user.name}`}>
+              <button
+                className="row-action"
+                aria-label={`Manage ${user.name}`}
+                onClick={() =>
+                  setNotice(
+                    `${user.name}'s access controls are ready for review.`,
+                  )
+                }
+              >
                 •••
               </button>
             </div>
           ))}
         </div>
       </section>
+      {notice && (
+        <div className="notice-banner" role="status">
+          {notice}
+          <button onClick={() => setNotice("")}>Dismiss</button>
+        </div>
+      )}
       <section className="panel">
         <div className="flex items-start gap-3">
           <span className="security-icon">✓</span>

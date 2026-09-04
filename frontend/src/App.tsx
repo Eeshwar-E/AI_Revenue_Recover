@@ -6,6 +6,9 @@ import CaseDetail from "./pages/CaseDetail";
 import AgentRuns from "./pages/AgentRuns";
 import AuditTrail from "./pages/AuditTrail";
 import Users from "./pages/Users";
+import Customers from "./pages/Customers";
+import Receivables from "./pages/Receivables";
+import Subscriptions from "./pages/Subscriptions";
 
 function App() {
   return (
@@ -18,6 +21,9 @@ function App() {
           <Route path="agent-runs" element={<AgentRuns />} />
           <Route path="audit" element={<AuditTrail />} />
           <Route path="users" element={<Users />} />
+          <Route path="customers" element={<Customers />} />
+          <Route path="receivables" element={<Receivables />} />
+          <Route path="subscriptions" element={<Subscriptions />} />
         </Route>
       </Routes>
     </BrowserRouter>

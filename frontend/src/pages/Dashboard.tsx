@@ -7,6 +7,17 @@ import {
   getFunnel,
   getFailureReasons,
 } from "../lib/api";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const normalizeList = (value: unknown): any[] => {
   if (Array.isArray(value)) return value;
@@ -60,6 +71,14 @@ function Dashboard() {
   const failureReasonItems = normalizeList(failureReasons);
   const recoveryItems = normalizeList(recoveryByType);
   const funnelItems = normalizeList(funnel);
+  const chartRecovery = recoveryItems.map((item) => ({
+    ...item,
+    label: String(item.type || "Other").replaceAll("_", " "),
+  }));
+  const chartRisk = riskDist.map((item) => ({
+    ...item,
+    name: item.risk_level || "Unknown",
+  }));
 
   const runBatch = async () => {
     setLoading(true);
@@ -99,8 +118,8 @@ function Dashboard() {
           Run recovery batch
         </button>
       </header>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="metric-card">
+      <div className="square-card-grid">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
             ₹
             {Math.round(summary?.total_revenue_at_risk || 0).toLocaleString(
@@ -112,7 +131,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
             ₹
             {Math.round(summary?.total_revenue_recovered || 0).toLocaleString(
@@ -124,16 +143,16 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            %{(summary?.recovery_rate || 0).toFixed(1)}
+            {(summary?.recovery_rate || 0).toFixed(1)}%
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Recovery Rate
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
             {summary?.active_cases || 0}
           </div>
@@ -142,7 +161,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
             {summary?.escalated_cases || 0}
           </div>
@@ -151,7 +170,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card square-card">
           <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
             {summary?.recovered_cases || 0}
           </div>
@@ -205,16 +224,120 @@ function Dashboard() {
         </section>
       </div>
 
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <section className="panel">
+          <p className="section-kicker">Money recovered</p>
+          <h2 className="section-title">Recovery by risk category</h2>
+          <div className="chart-panel">
+            {chartRecovery.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartRecovery}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 35 }}
+                >
+                  <XAxis
+                    dataKey="label"
+                    angle={-18}
+                    textAnchor="end"
+                    height={55}
+                    tick={{ fontSize: 11, fill: "#718096" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#718096" }}
+                    tickFormatter={(value) => `₹${Math.round(value / 1000)}k`}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => [
+                      `₹${Math.round(value).toLocaleString("en-IN")}`,
+                      "Recovered",
+                    ]}
+                  />
+                  <Bar
+                    dataKey="recovered"
+                    fill="#14b8a6"
+                    radius={[5, 5, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">
+                Recovery data will appear after an agent run.
+              </div>
+            )}
+          </div>
+        </section>
+        <section className="panel">
+          <p className="section-kicker">Portfolio exposure</p>
+          <h2 className="section-title">Risk distribution</h2>
+          <div className="chart-grid">
+            <div className="chart-panel">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartRisk}
+                    dataKey="amount"
+                    nameKey="name"
+                    innerRadius={58}
+                    outerRadius={88}
+                    paddingAngle={3}
+                  >
+                    {chartRisk.map((item, index) => (
+                      <Cell
+                        key={item.name}
+                        fill={
+                          ["#ef806d", "#f4b860", "#14b8a6", "#93a7bd"][
+                            index % 4
+                          ]
+                        }
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => [
+                      `₹${Math.round(value).toLocaleString("en-IN")}`,
+                      "At risk",
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-3">
+              {chartRisk.map((item, index) => (
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between gap-4 text-sm"
+                >
+                  <span>
+                    <i
+                      className="legend-dot"
+                      style={{
+                        background: [
+                          "#ef806d",
+                          "#f4b860",
+                          "#14b8a6",
+                          "#93a7bd",
+                        ][index % 4],
+                      }}
+                    />
+                    {item.name}
+                  </span>
+                  <b>{item.count}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+
       <section className="panel">
         <p className="section-kicker">Agent workflow</p>
         <h2 className="section-title">Detect to recover</h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {funnelItems.map((f: any, index) => (
-            <div
-              key={f.stage || index}
-              className="rounded-lg bg-slate-50 p-4 text-sm"
-            >
-              {f.stage}: {f.count}
+            <div key={f.stage || index} className="funnel-step">
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <b>{f.count}</b>
+              <small>{f.stage}</small>
             </div>
           ))}
         </div>

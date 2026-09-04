@@ -4,12 +4,15 @@ function AgentRuns() {
   const [events, setEvents] = useState<any[]>([]);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [showRecovered, setShowRecovered] = useState(false);
   const load = () =>
     auditAPI
       .getAll({ limit: 50, offset: 0 })
       .then((data: any) => setEvents(data?.events || []))
       .catch(console.error);
-  useEffect(load, []);
+  useEffect(() => {
+    void load();
+  }, []);
   const run = async () => {
     setRunning(true);
     try {
@@ -72,47 +75,106 @@ function AgentRuns() {
           </div>
         </div>
       )}
+      <section className="agent-run-board panel">
+        <div>
+          <p className="section-kicker">Ready to execute</p>
+          <h2 className="section-title">Bounded recovery workflow</h2>
+          <p className="run-copy">
+            The agent will process unresolved cases through deterministic policy
+            gates and mock payment adapters.
+          </p>
+        </div>
+        <div className="workflow-track">
+          {["Detect", "Diagnose", "Decide", "Policy", "Execute", "Verify"].map(
+            (step, index) => (
+              <div className="workflow-node" key={step}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <b>{step}</b>
+              </div>
+            ),
+          )}
+        </div>
+      </section>
       <section className="panel">
         <p className="section-kicker">Latest events</p>
         <h2 className="section-title">Decision stream</h2>
-        <div className="mt-5 divide-y divide-slate-100">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <span className="mr-2 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                  {event.actor}
-                </span>
-                <span className="font-semibold text-slate-800">
-                  {event.event_type?.replaceAll("_", " ")}
-                </span>
-                <p className="mt-2 text-sm text-slate-500">
-                  {event.details ||
-                    event.action_result ||
-                    "Event recorded by the recovery workflow"}
-                </p>
-              </div>
-              <div className="text-right text-sm">
-                <div className="font-semibold text-emerald-700">
-                  ₹
-                  {Math.round(event.recovery_amount || 0).toLocaleString(
-                    "en-IN",
-                  )}
-                </div>
-                <div className="mt-1 text-xs text-slate-400">
-                  {event.timestamp
-                    ? new Date(event.timestamp).toLocaleString()
-                    : ""}
-                </div>
-              </div>
-            </div>
-          ))}
-          {!events.length && (
-            <p className="py-5 text-sm text-slate-500">No runs recorded yet.</p>
-          )}
+        <div className="mt-5 table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Actor</th>
+                <th>Event</th>
+                <th>Result</th>
+                <th>Recovered</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events
+                .filter(
+                  (event) => !showRecovered || (event.recovery_amount || 0) > 0,
+                )
+                .map((event) => (
+                  <tr key={event.id}>
+                    <td>
+                      <span className="status-pill">{event.actor}</span>
+                    </td>
+                    <td>
+                      <b className="text-slate-800">
+                        {event.event_type?.replaceAll("_", " ")}
+                      </b>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {event.details ||
+                          event.action_result ||
+                          "Event recorded by the recovery workflow"}
+                      </p>
+                    </td>
+                    <td className="muted-cell">
+                      {event.action_result || "Recorded"}
+                    </td>
+                    <td className="font-semibold text-emerald-700">
+                      ₹
+                      {Math.round(event.recovery_amount || 0).toLocaleString(
+                        "en-IN",
+                      )}
+                    </td>
+                    <td className="muted-cell">
+                      {event.timestamp
+                        ? new Date(event.timestamp).toLocaleString()
+                        : ""}
+                    </td>
+                  </tr>
+                ))}
+              {!events.length && (
+                <tr>
+                  <td colSpan={5}>
+                    <div className="run-empty">
+                      <div className="run-empty-icon">✦</div>
+                      <b>No agent run recorded yet</b>
+                      <span>
+                        Start a full recovery batch to populate this decision
+                        stream.
+                      </span>
+                      <button
+                        disabled={running}
+                        onClick={run}
+                        className="primary-button"
+                      >
+                        {running ? "Running batch..." : "Run first batch"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+        <button
+          onClick={() => setShowRecovered(!showRecovered)}
+          className="filter-button mt-4"
+        >
+          {showRecovered ? "Show all events" : "Show recovered events only"}
+        </button>
       </section>
     </div>
   );
