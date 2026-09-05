@@ -15,6 +15,7 @@ from datetime import datetime
 class RecoveryOrchestrator:
     def __init__(self, db: Session):
         self.db = db
+        self.state_machine = StateMachine()
         self.decision_engine = DecisionEngine(
             use_llm=settings.LLM_API_KEY is not None, api_key=settings.LLM_API_KEY)
         self.root_cause_engine = RootCauseEngine()
@@ -23,6 +24,10 @@ class RecoveryOrchestrator:
         self.recovery_engine = RecoveryEngine(db)
 
     def run_case(self, case_id: int) -> Dict[str, Any]:
+        import uuid
+        from app.models.agent_run import AgentRun
+        run_id = f"RUN-{uuid.uuid4().hex[:6].upper()}"
+        start = datetime.now()
         case = self.db.query(RevenueRiskCase).filter(RevenueRiskCase.id == case_id).first()
         if not case:
             return {"error": f"Case {case_id} not found"}
@@ -69,16 +74,16 @@ class RecoveryOrchestrator:
                 case.status = "STOPPED"
                 case.stop_reason = pol["reason"]
                 self.db.commit()
-                return {"steps": steps, "final_status": "STOPPED", "recovered_amount": case.recovered_amount}
+                return {"run_id": run_id, "steps": steps, "final_status": "STOPPED", "recovered_amount": case.recovered_amount}
             if pol["result"] == "REQUIRES_MANUAL_REVIEW":
                 case.status = "MANUAL_REVIEW"
                 self.db.commit()
-                return {"steps": steps, "final_status": "MANUAL_REVIEW", "recovered_amount": case.recovered_amount}
+                return {"run_id": run_id, "steps": steps, "final_status": "MANUAL_REVIEW", "recovered_amount": case.recovered_amount}
             if pol["result"] == "REJECTED":
                 case.status = "STOPPED"
                 case.stop_reason = pol["reason"]
                 self.db.commit()
-                return {"steps": steps, "final_status": "STOPPED", "recovered_amount": case.recovered_amount}
+                return {"run_id": run_id, "steps": steps, "final_status": "STOPPED", "recovered_amount": case.recovered_amount}
             current_state = self.state_machine.transition(current_state, RecoveryState.ACTION_PENDING)
 
         # Step 5: Execute
@@ -100,10 +105,17 @@ class RecoveryOrchestrator:
             else:
                 steps.append({"step": "RETRY_PENDING", "message": f"Pending retry. Attempt {case.current_retry_count}/{case.max_retries}", "state": "RETRY_PENDING"})
             self.db.commit()
-            return {"steps": steps, "final_status": case.status, "recovered_amount": case.recovered_amount, "case_id": case.id, "case_number": case.case_number}
+            end = datetime.now()
+            self.db.add(AgentRun(run_id=run_id, case_id=case.id, start_time=start, end_time=end,
+                                 duration_seconds=(end - start).total_seconds(), steps_executed=len(steps),
+                                 decision=case.recommended_action, actions=str([s["step"] for s in steps]),
+                                 result=case.status, revenue_recovered=case.recovered_amount or 0,
+                                 failure_reason=case.stop_reason))
+            self.db.commit()
+            return {"run_id": run_id, "steps": steps, "final_status": case.status, "recovered_amount": case.recovered_amount, "case_id": case.id, "case_number": case.case_number}
 
         self.db.commit()
-        return {"steps": steps, "final_status": case.status, "recovered_amount": case.recovered_amount, "case_id": case.id, "case_number": case.case_number}
+        return {"run_id": run_id, "steps": steps, "final_status": case.status, "recovered_amount": case.recovered_amount, "case_id": case.id, "case_number": case.case_number}
 
     def _build_case_data(self, case: RevenueRiskCase, customer: Customer) -> Dict[str, Any]:
         return {

@@ -131,7 +131,7 @@ class SeedData:
     def _seed_promises(self, invoices):
         promises = []
         overdue = [i for i in invoices if i.status == "OVERDUE"]
-        for inv in overdue[:8]:
+        for inv in overdue[:12]:
             is_fulfilled = random.random() < 0.3
             ptp = PromiseToPay(
                 invoice_id=inv.id, promised_amount=round(inv.amount * random.uniform(0.5, 1.0), 2),
@@ -258,7 +258,7 @@ class SeedData:
             case_num += 1
 
         # Mandate failure cases
-        for i in range(5):
+        for i in range(10):
             c = random.choice(customers)
             amount = round(random.uniform(1000, 10000), 2)
             case = RevenueRiskCase(
@@ -273,7 +273,7 @@ class SeedData:
             case_num += 1
 
         # Promise-to-pay cases
-        for i in range(6):
+        for i in range(10):
             c = random.choice(customers)
             amount = round(random.uniform(5000, 50000), 2)
             case = RevenueRiskCase(
@@ -286,6 +286,18 @@ class SeedData:
             self.db.add(case)
             cases.append(case)
             case_num += 1
+
+        # High-value enterprise case (₹5L+ manual-review showcase)
+        hv_c = customers[2] if len(customers) > 2 else customers[0]
+        hv_case = RevenueRiskCase(
+            case_number="CASE-%04d" % case_num, customer_id=hv_c.id,
+            source_type="RECEIVABLE", amount_at_risk=525000, recovered_amount=0,
+            status="DETECTED", risk_level="CRITICAL", risk_score=92,
+            root_cause="invoice_overdue", current_retry_count=0, max_retries=3,
+        )
+        self.db.add(hv_case)
+        cases.append(hv_case)
+        case_num += 1
 
         self.db.commit()
         return cases

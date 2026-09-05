@@ -16,5 +16,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: {
+      // 127.0.0.1 (IPv4) to match uvicorn's bind; 'localhost' may resolve to ::1 and refuse.
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+    },
   }
 })

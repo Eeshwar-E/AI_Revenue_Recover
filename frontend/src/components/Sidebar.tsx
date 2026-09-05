@@ -11,6 +11,7 @@ function Sidebar() {
     { href: "/agent-runs", label: "Agent runs" },
     { href: "/audit", label: "Audit trail" },
     { href: "/users", label: "Users & access" },
+    { href: "/settings", label: "Settings" },
   ];
 
   return (

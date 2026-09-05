@@ -5,7 +5,10 @@ from app.services.risk_engine import RiskEngine
 from app.services.root_cause_engine import RootCauseEngine
 from app.services.strategy_engine import StrategyEngine
 from app.services.policy_engine import PolicyEngine
+from app.services.recovery_engine import RecoveryEngine
+from app.models.audit import AuditEvent
 from datetime import datetime
+import uuid
 
 
 class BatchService:
@@ -15,7 +18,7 @@ class BatchService:
         self.root_cause_engine = RootCauseEngine()
         self.strategy_engine = StrategyEngine()
         self.policy_engine = PolicyEngine()
-        self.recovery_engine = None  # init per case
+        self.recovery_engine = RecoveryEngine(db)
 
     def run_full_batch(self) -> Dict[str, Any]:
         start = datetime.now()
@@ -42,11 +45,12 @@ class BatchService:
         recovered = total_after - total_recovered_before
         duration = (datetime.now() - start).total_seconds()
         return {
-            "batch_id": int(start.timestamp()),
+            "batch_id": str(uuid.uuid4())[:8],
             "cases_processed": counts["processed"],
             "total_at_risk": total_at_risk,
-            "recovered_amount": total_after,
+            "recovered_amount": recovered,
             "recovered_this_batch": recovered,
+            "total_recovered_cumulative": total_after,
             "recovery_rate": round((total_after / max(total_at_risk, 1)) * 100, 1),
             "successful_recoveries": counts["successful"],
             "failed_cases": counts["failed"],
@@ -78,9 +82,13 @@ class BatchService:
         if pol["result"] == "STOP_WORKFLOW":
             case.status = "STOPPED"
             case.stop_reason = pol["reason"]
+            self.db.add(AuditEvent(case_id=case.id, actor="AGENT", event_type="POLICY_STOP",
+                                   policy_result=pol["result"], details=pol["reason"], timestamp=datetime.now()))
             return {"final_status": "STOPPED", "actions_taken": 0}
         if pol["result"] == "REQUIRES_MANUAL_REVIEW":
             case.status = "MANUAL_REVIEW"
+            self.db.add(AuditEvent(case_id=case.id, actor="AGENT", event_type="MANUAL_REVIEW_FLAGGED",
+                                   policy_result=pol["result"], details=pol["reason"], timestamp=datetime.now()))
             return {"final_status": "MANUAL_REVIEW", "actions_taken": 0}
         if pol["result"] == "REJECTED":
             if rc.get("retryable", True):
@@ -91,9 +99,9 @@ class BatchService:
                 case.status = "ESCALATED"
                 case.should_escalate = 1
                 return {"final_status": "ESCALATED", "actions_taken": 0}
-        # Execute
+        # Execute via real recovery engine (creates RecoveryAction + Notification + AuditEvent)
         case.status = "ACTION_EXECUTED"
-        res = self.recovery_engine.execute_action(case, case.recommended_action, strat) if self.recovery_engine else {"recovered_amount": 0, "result": "SUCCESS", "case_status": case.status}
+        res = self.recovery_engine.execute_action(case, case.recommended_action, strat)
         case.status = res["case_status"]
         actions_taken = 1
         return {"final_status": case.status, "actions_taken": actions_taken, "recovered": res.get("recovered_amount", 0)}

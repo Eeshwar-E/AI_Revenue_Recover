@@ -17,15 +17,19 @@ class RecoveryEngine:
         self.notification_service = NotificationService(db)
 
     def execute_action(self, case: RevenueRiskCase, action_type: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
+        from app.models.notification import Notification
         recovered = 0.0
         result = "PENDING"
         details = ""
+        remaining = (case.amount_at_risk or 0) - (case.recovered_amount or 0)
 
         if action_type in ["RETRY_PAYMENT", "DELAYED_RETRY"]:
             pr = self.payment_provider.retry_payment(case.transaction_id or case.id)
             result = pr["status"]
             if result == "SUCCESS":
-                recovered = case.amount_at_risk - case.recovered_amount
+                # Partial recovery: settle remaining, capped (supports partial via strategy fraction)
+                fraction = float(strategy.get("recovery_fraction", 1.0))
+                recovered = round(remaining * max(0.0, min(fraction, 1.0)), 2)
                 details = f"Payment succeeded. Ref: {pr.get('gateway_reference', 'N/A')}"
             else:
                 details = f"Failed. Reason: {pr.get('failure_reason', 'unknown')}"
@@ -33,8 +37,16 @@ class RecoveryEngine:
             result = "SUCCESS"
             details = "Payment method update request sent"
         elif action_type == "SEND_NOTIFICATION":
-            result = "SENT"
-            details = "Notification sent"
+            from app.models.customer import Customer
+            customer = self.db.query(Customer).filter(Customer.id == case.customer_id).first()
+            if customer and not self.notification_service.can_contact(customer.id):
+                result = "BLOCKED"
+                details = "Contact frequency limit reached — notification suppressed"
+            else:
+                if customer:
+                    self.notification_service.send_payment_retry(customer, remaining, case.case_number or str(case.id))
+                result = "SENT"
+                details = "Notification sent"
         elif action_type == "ESCALATE":
             result = "ESCALATED"
             details = "Case escalated to account manager"
@@ -74,7 +86,8 @@ class RecoveryEngine:
             recovery_amount=recovered,
             next_step=case.status,
             details=details,
-            policy_result="APPROVED"
+            policy_result="APPROVED",
+            timestamp=datetime.now(),
         )
         self.db.add(audit)
         self.db.commit()

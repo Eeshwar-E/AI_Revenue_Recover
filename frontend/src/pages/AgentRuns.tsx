@@ -1,26 +1,36 @@
 import { useEffect, useState } from "react";
-import { batchAPI, auditAPI } from "../lib/api";
+import { batchAPI, auditAPI, agentAPI } from "../lib/api";
+const STEPS = ["Detecting revenue risk…", "Analyzing payment history…", "Diagnosing root cause…", "Selecting intervention…", "Running policy checks…", "Executing recovery…", "Verifying payment…", "Updating audit trail…"];
 function AgentRuns() {
   const [events, setEvents] = useState<any[]>([]);
+  const [runs, setRuns] = useState<any[]>([]);
   const [running, setRunning] = useState(false);
+  const [stepIdx, setStepIdx] = useState(-1);
   const [result, setResult] = useState<any>(null);
   const [showRecovered, setShowRecovered] = useState(false);
   const load = () =>
-    auditAPI
-      .getAll({ limit: 50, offset: 0 })
-      .then((data: any) => setEvents(data?.events || []))
-      .catch(console.error);
+    Promise.all([
+      auditAPI
+        .getAll({ limit: 50, offset: 0 })
+        .then((data: any) => setEvents(data?.events || []))
+        .catch(console.error),
+      agentAPI.runs().then(setRuns).catch(() => setRuns([])),
+    ]);
   useEffect(() => {
     void load();
   }, []);
   const run = async () => {
     setRunning(true);
+    setStepIdx(0);
+    const timer = setInterval(() => setStepIdx((i) => (i + 1) % STEPS.length), 600);
     try {
       setResult(await batchAPI.run());
       await load();
     } catch (e) {
       console.error(e);
     } finally {
+      clearInterval(timer);
+      setStepIdx(-1);
       setRunning(false);
     }
   };
@@ -87,12 +97,37 @@ function AgentRuns() {
         <div className="workflow-track">
           {["Detect", "Diagnose", "Decide", "Policy", "Execute", "Verify"].map(
             (step, index) => (
-              <div className="workflow-node" key={step}>
+              <div className={`workflow-node ${running && index <= stepIdx % 6 ? "opacity-100" : running ? "opacity-40" : ""}`} key={step}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <b>{step}</b>
               </div>
             ),
           )}
+        </div>
+        {running && <p className="mt-3 text-sm font-medium text-teal-700">{STEPS[stepIdx % STEPS.length]}</p>}
+      </section>
+      <section className="panel">
+        <p className="section-kicker">Observability</p>
+        <h2 className="section-title">Agent runs (run_id · duration · steps · result)</h2>
+        <div className="mt-4 table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr><th>Run</th><th>Case</th><th>Result</th><th>Recovered</th><th>Steps</th><th>Duration</th></tr>
+            </thead>
+            <tbody>
+              {runs.map((r: any) => (
+                <tr key={r.run_id}>
+                  <td className="font-semibold">{r.run_id}</td>
+                  <td>{r.case_id ?? r.batch_id ?? "—"}</td>
+                  <td>{r.result}</td>
+                  <td className="font-semibold text-emerald-700">₹{Math.round(r.revenue_recovered || 0).toLocaleString("en-IN")}</td>
+                  <td>{r.steps_executed}</td>
+                  <td>{r.duration_seconds}s</td>
+                </tr>
+              ))}
+              {!runs.length && (<tr><td colSpan={6} className="muted-cell">No runs yet — single-case runs appear here.</td></tr>)}
+            </tbody>
+          </table>
         </div>
       </section>
       <section className="panel">

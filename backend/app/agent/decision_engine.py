@@ -116,4 +116,44 @@ class DecisionEngine:
         }
 
     def _llm_analyze(self, case_data: Dict[str, Any]) -> Dict[str, Any]:
-        return self._deterministic_analyze(case_data)
+        """LLM provider interface with structured-JSON retry + deterministic fallback (§5)."""
+        import json
+        last_err = None
+        for _ in range(2):
+            try:
+                payload = self._call_llm(case_data)
+                decision = json.loads(payload) if isinstance(payload, str) else dict(payload)
+                # Validate required shape
+                for k in ("risk_score", "risk_level", "root_cause", "recommended_action"):
+                    if k not in decision:
+                        raise ValueError(f"LLM response missing key: {k}")
+                decision.setdefault("confidence", 0.6)
+                decision.setdefault("reasoning", "LLM recommendation (validated)")
+                decision.setdefault("expected_recovery", 0)
+                decision.setdefault("max_attempts", 3)
+                decision.setdefault("should_escalate", False)
+                decision.setdefault("stop_reason", None)
+                return decision
+            except Exception as e:
+                last_err = e
+        # Fallback to deterministic rules
+        d = self._deterministic_analyze(case_data)
+        d["reasoning"] = f"{d['reasoning']} (deterministic fallback; LLM unavailable: {last_err})"
+        return d
+
+    def _call_llm(self, case_data: Dict[str, Any]) -> str:
+        """Replaceable provider: uses httpx against OpenAI-compatible chat endpoint if configured."""
+        import os
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY not configured")
+        import httpx
+        base = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+        model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+        prompt = ("Return ONLY JSON with keys risk_score(0-100), risk_level(LOW|MEDIUM|HIGH|CRITICAL), "
+                  f"root_cause, confidence(0-1), recommended_action, reasoning, expected_recovery, max_attempts, should_escalate, stop_reason. Case: {case_data}")
+        r = httpx.post(f"{base}/chat/completions",
+                       headers={"Authorization": f"Bearer {self.api_key}"},
+                       json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
+                       timeout=15)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]

@@ -68,6 +68,31 @@ function CaseDetail() {
               Stop
             </button>
           )}
+          {item.status === "MANUAL_REVIEW" && (
+            <>
+              <button
+                disabled={busy}
+                onClick={() => execute(() => casesAPI.approve(id!), "Approve")}
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
+              >
+                Approve
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => execute(() => casesAPI.reject(id!), "Reject")}
+                className="rounded-lg border px-3 py-2 text-sm font-semibold"
+              >
+                Reject
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => execute(() => casesAPI.escalate(id!), "Escalate")}
+                className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-700"
+              >
+                Escalate
+              </button>
+            </>
+          )}
         </div>
       </header>
       {message && (
@@ -125,6 +150,28 @@ function CaseDetail() {
               <p className="mt-2 font-semibold text-slate-800">
                 {item.recommended_action || "Awaiting agent decision"}
               </p>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-semibold">WHY AT RISK</p>
+                <p className="mt-1 text-slate-600">
+                  Hist {Math.round((item.historical_success_rate || 0) * 100)}% → Recent{" "}
+                  {Math.round((item.recent_success_rate || 0) * 100)}%. Cause: {item.root_cause || "—"}.
+                </p>
+              </div>
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-semibold">POLICY CHECK</p>
+                <p className="mt-1 text-slate-600">
+                  Attempts {item.current_retry_count || 0}/{item.max_retries || 3} · Confidence{" "}
+                  {Math.round((item.confidence || 0) * 100)}% · {item.status === "MANUAL_REVIEW" ? "MANUAL REVIEW REQUIRED" : "Within limits"}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-semibold">STOP / ESCALATE</p>
+                <p className="mt-1 text-slate-600">
+                  {item.stop_reason || (item.should_escalate ? "Escalation flagged" : "Stops on recover / max retries / opt-out / permanent failure")}
+                </p>
+              </div>
             </div>
           </div>
         </section>

@@ -12,6 +12,19 @@ from typing import List, Optional
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
+def _mask_email(e: str | None) -> str | None:
+    if not e or "@" not in e:
+        return e
+    u, d = e.split("@", 1)
+    return f"{u[:2]}***@{d}"
+
+
+def _mask_phone(p: str | None) -> str | None:
+    if not p or len(p) < 4:
+        return "****"
+    return f"****{p[-4:]}"
+
+
 @router.get("", response_model=List[CaseResponse])
 def get_cases(status: Optional[str] = None, source_type: Optional[str] = None, risk_level: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(RevenueRiskCase)
@@ -58,8 +71,8 @@ def get_case_detail(case_id: int, db: Session = Depends(get_db)):
         "id": case.id, "case_number": case.case_number,
         "customer_id": case.customer_id,
         "customer_name": customer.name if customer else "Unknown",
-        "customer_email": customer.email if customer else None,
-        "customer_phone": customer.phone if customer else None,
+        "customer_email": _mask_email(customer.email) if customer else None,
+        "customer_phone": _mask_phone(customer.phone) if customer else None,
         "customer_segment": customer.segment if customer else None,
         "customer_lifetime_value": customer.lifetime_value if customer else 0,
         "historical_success_rate": customer.historical_success_rate if customer else 0,
@@ -113,6 +126,32 @@ def approve_case(case_id: int, db: Session = Depends(get_db)):
     orchestrator = RecoveryOrchestrator(db)
     result = orchestrator.run_case(case_id)
     return result
+
+
+@router.post("/{case_id}/reject")
+def reject_case(case_id: int, db: Session = Depends(get_db)):
+    case = db.query(RevenueRiskCase).filter(RevenueRiskCase.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    case.status = "STOPPED"
+    case.stop_reason = "Rejected by operator"
+    db.add(AuditEvent(case_id=case.id, actor="HUMAN", event_type="MANUAL_REJECT",
+                      details="Operator rejected autonomous action"))
+    db.commit()
+    return {"status": "stopped", "case_id": case.id}
+
+
+@router.post("/{case_id}/escalate")
+def escalate_case(case_id: int, db: Session = Depends(get_db)):
+    case = db.query(RevenueRiskCase).filter(RevenueRiskCase.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    case.status = "ESCALATED"
+    case.should_escalate = 1
+    db.add(AuditEvent(case_id=case.id, actor="HUMAN", event_type="MANUAL_ESCALATE",
+                      details="Operator escalated case"))
+    db.commit()
+    return {"status": "escalated", "case_id": case.id}
 
 
 @router.post("/{case_id}/stop")

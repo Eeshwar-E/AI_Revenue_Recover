@@ -258,6 +258,56 @@ def test_zero_recovery():
     print("✓ Revenue: zero recovery handled")
 
 
+def test_policy_contact_limit():
+    p = PolicyEngine()
+    r = p.validate_action({"action_type": "SEND_NOTIFICATION"},
+                          {"status": "DETECTED", "amount_at_risk": 5000, "recovered_amount": 0,
+                           "current_retry_count": 0, "max_retries": 3},
+                          {"has_opted_out": False, "contacts_last_7d": 5})
+    assert r["result"] == "REJECTED"
+    print("✓ Policy: contact frequency limit")
+
+
+def test_policy_closed_states():
+    p = PolicyEngine()
+    for st in ("ESCALATED", "MANUAL_REVIEW"):
+        r = p.validate_action({"action_type": "RETRY_PAYMENT"},
+                              {"status": st, "amount_at_risk": 5000, "recovered_amount": 0,
+                               "current_retry_count": 0, "max_retries": 3},
+                              {"has_opted_out": False})
+        assert r["result"] == "STOP_WORKFLOW", st
+    print("✓ Policy: closed states stop")
+
+
+def test_llm_fallback():
+    d = DecisionEngine(use_llm=True, api_key="invalid")
+    out = d.analyze_case({"amount": 10000, "historical_success_rate": 0.9,
+                          "recent_success_rate": 0.4, "failure_reason": "network_error",
+                          "retry_count": 0, "source_type": "PAYMENT_FAILURE"})
+    assert out["recommended_action"] == "RETRY_PAYMENT"
+    assert "fallback" in out["reasoning"]
+    print("✓ Decision: LLM fallback works")
+
+
+def test_mandate_sequencer():
+    from app.services.promise_service import PromiseService
+    svc = PromiseService.__new__(PromiseService)
+    assert svc.mandate_next_step("network_error", 0)["wait_hours"] == 2
+    assert svc.mandate_next_step("insufficient_funds", 0)["wait_hours"] == 48
+    assert svc.mandate_next_step("expired_card", 0)["action"] == "UPDATE_PAYMENT_METHOD"
+    assert svc.mandate_next_step("network_error", 5)["action"] == "ESCALATE"
+    print("✓ Mandate sequencer")
+
+
+def test_tool_registry():
+    from app.agent.tools import ToolRegistry
+    reg = ToolRegistry()
+    reg.register("retry_payment", lambda transaction_id: {"status": "OK"})
+    assert reg.execute("retry_payment", transaction_id=1)["status"] == "OK"
+    assert "error" in reg.execute("nope")
+    print("✓ Tool registry")
+
+
 if __name__ == "__main__":
     test_risk_engine()
     test_root_cause_engine()
@@ -273,4 +323,9 @@ if __name__ == "__main__":
     test_no_double_counting()
     test_partial_recovery()
     test_zero_recovery()
+    test_policy_contact_limit()
+    test_policy_closed_states()
+    test_llm_fallback()
+    test_mandate_sequencer()
+    test_tool_registry()
     print("\n✅ All tests passed!")

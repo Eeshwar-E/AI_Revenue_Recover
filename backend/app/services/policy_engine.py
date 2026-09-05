@@ -11,10 +11,18 @@ class PolicyEngine:
     def validate_action(self, action: Dict[str, Any], case: Dict[str, Any], customer: Dict[str, Any]) -> Dict[str, Any]:
         if case.get("status") == "RECOVERED":
             return {"result": "STOP_WORKFLOW", "reason": "Case already recovered"}
-        if case.get("status") in ["STOPPED", "FAILED"]:
+        if case.get("status") in ["STOPPED", "FAILED", "ESCALATED", "MANUAL_REVIEW"]:
             return {"result": "STOP_WORKFLOW", "reason": "Case already closed"}
         if customer.get("has_opted_out", False):
             return {"result": "STOP_WORKFLOW", "reason": "Customer opted out"}
+        # Contact frequency + allowed hours gates
+        if action.get("action_type") in ["SEND_NOTIFICATION", "UPDATE_PAYMENT_METHOD"]:
+            if customer.get("contacts_last_7d", 0) >= self.MAX_CONTACTS_PER_WEEK:
+                return {"result": "REJECTED", "reason": "Contact frequency limit reached"}
+            from datetime import datetime
+            hour = customer.get("current_hour", datetime.now().hour)
+            if hour < 8 or hour > 20:
+                return {"result": "REJECTED", "reason": "Outside allowed contact hours"}
         rc = case.get("current_retry_count", 0)
         mr = case.get("max_retries", self.MAX_RETRIES)
         if rc >= mr and action.get("action_type") in ["RETRY_PAYMENT", "DELAYED_RETRY"]:

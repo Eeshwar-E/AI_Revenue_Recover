@@ -1,9 +1,15 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
+
+# Absolute default: <backend>/revenue_recover.db regardless of launch CWD.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DEFAULT_DB = f"sqlite:///{os.path.join(_BACKEND_DIR, 'revenue_recover.db')}"
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./revenue_recover.db"
+    # Local-first: SQLite runs with zero setup. Override with Postgres via .env.
+    DATABASE_URL: str = _DEFAULT_DB
     LLM_API_KEY: Optional[str] = None
     LLM_MODEL: str = "gpt-4"
     DEMO_MODE: bool = True

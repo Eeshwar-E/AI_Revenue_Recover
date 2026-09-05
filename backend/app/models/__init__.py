@@ -8,9 +8,10 @@ from app.models.subscription import Subscription
 from app.models.invoice import Invoice
 from app.models.promise import PromiseToPay
 from app.models.notification import Notification
+from app.models.agent_run import AgentRun
 
 __all__ = [
     "Base", "Customer", "Transaction", "RevenueRiskCase",
     "RecoveryAction", "AuditEvent", "Subscription", "Invoice",
-    "PromiseToPay", "Notification"
+    "PromiseToPay", "Notification", "AgentRun"
 ]

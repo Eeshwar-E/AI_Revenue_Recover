@@ -37,6 +37,8 @@ function Dashboard() {
   const [funnel, setFunnel] = useState<any[]>([]);
   const [failureReasons, setFailureReasons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [batchProgress, setBatchProgress] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -56,6 +58,7 @@ function Dashboard() {
         setFailureReasons(normalizeList(reasons));
       } catch (e) {
         console.error("Dashboard data load failed:", e);
+        setError("Could not reach the backend at http://localhost:8000. Start it with: cd backend, then uvicorn app.main:app --port 8000.");
         setSummary({});
         setRecoveryByType([]);
         setRiskDist([]);
@@ -82,11 +85,28 @@ function Dashboard() {
 
   const runBatch = async () => {
     setLoading(true);
+    setBatchProgress("Processing cases…");
     try {
-      await batchAPI.run();
-      window.location.reload();
+      const res: any = await batchAPI.run();
+      setBatchProgress(
+        `RECOVERY COMPLETE: ${res.cases_processed} processed · ₹${Math.round(res.recovered_amount || 0).toLocaleString("en-IN")} recovered · ${res.recovery_rate}% · ${res.successful_recoveries} success / ${res.escalated_cases} escalated / ${res.stopped_cases} stopped · avg ${res.average_attempts} attempts in ${res.duration_seconds}s`,
+      );
+      const [s, r, risk, funnelData, reasons] = await Promise.all([
+        getSummary(),
+        getRecovery(),
+        getRiskDistribution(),
+        getFunnel(),
+        getFailureReasons(),
+      ]);
+      setSummary(s ?? {});
+      setRecoveryByType(normalizeList(r));
+      setRiskDist(normalizeList(risk));
+      setFunnel(normalizeList(funnelData));
+      setFailureReasons(normalizeList(reasons));
     } catch (error) {
       console.error("Batch run failed:", error);
+      setError("Batch run failed — is the backend running?");
+    } finally {
       setLoading(false);
     }
   };
@@ -178,7 +198,27 @@ function Dashboard() {
             Successful
           </div>
         </div>
+
+        <div className="metric-card square-card">
+          <div className="text-2xl font-bold text-rose-600">
+            {summary?.failed_cases ?? summary?.failed_recoveries ?? 0}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Failed recoveries
+          </div>
+        </div>
       </div>
+      {error && (
+        <div className="rounded-lg bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+          {error}{" "}
+          <button onClick={() => window.location.reload()} className="underline">Retry</button>
+        </div>
+      )}
+      {batchProgress && (
+        <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+          {batchProgress}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <section className="panel xl:col-span-2">
           <div className="flex items-center justify-between">

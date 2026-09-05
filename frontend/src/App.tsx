@@ -9,6 +9,7 @@ import Users from "./pages/Users";
 import Customers from "./pages/Customers";
 import Receivables from "./pages/Receivables";
 import Subscriptions from "./pages/Subscriptions";
+import Settings from "./pages/Settings";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="customers" element={<Customers />} />
           <Route path="receivables" element={<Receivables />} />
           <Route path="subscriptions" element={<Subscriptions />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>
